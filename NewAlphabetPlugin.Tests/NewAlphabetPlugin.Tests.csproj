@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The code under test is compiled in directly. It has no VSTO dependencies, and referencing the add-in
+       project would tie the tests to its ClickOnce signing setup. -->
+  <ItemGroup>
+    <Compile Include="..\NewAlphabetPlugin\AlphabetRules.cs" Link="Linked\AlphabetRules.cs" />
+    <Compile Include="..\NewAlphabetPlugin\AlphabetConverter.cs" Link="Linked\AlphabetConverter.cs" />
+    <Compile Include="..\NewAlphabetPlugin\CyrillicRules.cs" Link="Linked\CyrillicRules.cs" />
+  </ItemGroup>
+
+  <!-- Matching Cyrillic and old Latin texts from the lotin-kirill transliterator's tests. -->
+  <ItemGroup>
+    <None Update="Fixtures\*.*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The same Office 2013+ interop assemblies the add-in uses; Visual Studio's Office tools install them. -->
+  <PropertyGroup>
+    <OfficePiaDir>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15</OfficePiaDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Office.Interop.Word">
+      <HintPath>$(OfficePiaDir)\Microsoft.Office.Interop.Word.dll</HintPath>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Office">
+      <HintPath>$(OfficePiaDir)\Office.dll</HintPath>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.4.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.4.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+</Project>

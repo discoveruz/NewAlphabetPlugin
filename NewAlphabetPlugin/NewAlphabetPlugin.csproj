@@ -31,6 +31,9 @@
     <DefineConstants>VSTO40;UseOfficeInterop</DefineConstants>
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <BootstrapperComponentsLocation>HomeSite</BootstrapperComponentsLocation>
+    <!-- msbuild -t:Publish needs these two; without IsWebBootstrapper no setup.exe is generated. -->
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <PublishUrl>publish\</PublishUrl>
     <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
     <ApplicationVersion>0.1.0.0</ApplicationVersion>
   </PropertyGroup>

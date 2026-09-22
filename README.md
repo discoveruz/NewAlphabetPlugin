@@ -101,8 +101,9 @@ from the command line you need the .NET SDK.
 4. Press **F5** to start Word with the add-in, or just open Word.
 
 To stop Word loading the development build, use **Build → Clean Solution**.
-The version that **Maʼlumot** shows is the `AssemblyVersion` in `NewAlphabetPlugin/Properties/AssemblyInfo.cs`;
-raise it for each release.
+The version that **Maʼlumot** shows is the `AssemblyVersion` in `NewAlphabetPlugin/Properties/AssemblyInfo.cs`.
+A release made from the Actions tab uses the version typed in instead; see
+[Continuous integration](#continuous-integration).
 To install the add-in on other computers, use **Build → Publish NewAlphabetPlugin**, which makes a ClickOnce setup.
 With a test certificate, Windows asks the user whether to trust the publisher.
 
@@ -119,32 +120,60 @@ dotnet test NewAlphabetPlugin.Tests
 
 ## Continuous integration
 
-`.github/workflows/build.yml` runs on GitHub's `windows-2022` runner for pushes to `main`, `dev` and `ci/cd`, and
-for pull requests into `main` and `dev`:
+`.github/workflows/build.yml` runs on GitHub's `windows-2022` runner for pushes to `main`, `dev` and `ci/cd`, for
+pull requests into `main` and `dev`, and when it is run from the Actions tab:
 
 - **Test** runs `dotnet test`. The runner has no Word, so the Word tests are skipped.
 - **Build the add-in** publishes the ClickOnce setup and uploads it as a build artifact named
-  `NewAlphabetPlugin-<version>`. The version is the `AssemblyVersion` plus the run number, for example `0.1.0.42`.
-- **Release** runs only for a `v*` tag. It attaches the zipped setup to a new GitHub release.
+  `NewAlphabetPlugin-<version>`. The version is the `AssemblyVersion` (or the version typed in for a release) plus
+  the run number, for example `0.1.0.42`.
+- **Release** runs only for a release (see below), once Test and Build pass. It attaches the zipped setup to a new
+  GitHub release.
 
-The build signs the ClickOnce manifests with the add-in's certificate, taken from these repository secrets:
+The build signs the ClickOnce manifests with the add-in's release certificate, taken from these repository secrets:
 
 | Secret | Value |
 |--------|-------|
 | `CLICKONCE_PFX_BASE64` | The `.pfx` file, Base64-encoded |
-| `CLICKONCE_PFX_PASSWORD` | Its password; leave it unset if the certificate has none |
+| `CLICKONCE_PFX_PASSWORD` | Its password |
 
-To set the first one from PowerShell, in the repository folder:
+Visual Studio's test certificate is only for your own builds: it is named after your computer and user name, and it
+lasts one year.
+Make the release certificate once, in PowerShell. Replace `Your Name` first, because it can't change later:
 
 ```
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("NewAlphabetPlugin\NewAlphabetPlugin_TemporaryKey.pfx")) | gh secret set CLICKONCE_PFX_BASE64
+$options = @{
+    Subject           = 'CN=Your Name'
+    Type              = 'CodeSigningCert'
+    NotAfter          = (Get-Date).AddYears(10)
+    CertStoreLocation = 'Cert:\CurrentUser\My'
+    Provider          = 'Microsoft Enhanced RSA and AES Cryptographic Provider'  # ClickOnce needs a CryptoAPI key
+    KeySpec           = 'Signature'
+    KeyExportPolicy   = 'Exportable'
+}
+$cert = New-SelfSignedCertificate @options
+Export-PfxCertificate -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" -FilePath "$HOME\NewAlphabetPlugin-release.pfx" -Password (Read-Host 'Choose a password' -AsSecureString)
 ```
 
-Without the secret, branch builds are signed with a throwaway certificate and a tag build fails. ClickOnce only updates
+Keep `NewAlphabetPlugin-release.pfx` and its password safe, outside the repository. Then set both secrets from the
+repository folder; the second command asks for the password:
+
+```
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\NewAlphabetPlugin-release.pfx")) | gh secret set CLICKONCE_PFX_BASE64
+gh secret set CLICKONCE_PFX_PASSWORD
+```
+
+Without the secret, branch builds are signed with a throwaway certificate and a release fails. ClickOnce only updates
 an installed add-in from a version signed with the same certificate, so every release must use the same one.
 
-To release, raise `AssemblyVersion` in `NewAlphabetPlugin/Properties/AssemblyInfo.cs`, commit it, and push a tag
-with the same version, for example `v0.2.0` for `0.2.0.0`. A tag that does not match fails the build.
+There are two ways to release:
+
+- **From the Actions tab:** open **Actions → Build → Run workflow**, keep `main`, type the version (for example
+  `0.2.0`) and run it. The build uses that version and, if Test and Build pass, creates the `v0.2.0` tag and the
+  release. `AssemblyInfo.cs` in the repository stays as it is.
+- **With a tag:** raise `AssemblyVersion` in `NewAlphabetPlugin/Properties/AssemblyInfo.cs` in a pull request, merge
+  it, and push a tag with the same version, for example `v0.2.0` for `0.2.0.0`. A tag that does not match fails the
+  build.
 
 ## Project layout
 

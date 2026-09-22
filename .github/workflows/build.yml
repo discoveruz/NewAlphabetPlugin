@@ -1,5 +1,5 @@
-# Tests and builds the add-in on every push and pull request. A v* tag also publishes a GitHub release with the
-# ClickOnce setup.
+# Tests and builds the add-in on every push and pull request. A v* tag, or a version typed in when the workflow is run
+# from the Actions tab, also publishes a GitHub release with the ClickOnce setup.
 name: Build
 
 on:
@@ -9,6 +9,11 @@ on:
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, such as 0.2.0. Leave it empty to only build.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -51,36 +56,62 @@ jobs:
     runs-on: windows-2022
     outputs:
       artifact: ${{ steps.version.outputs.artifact }}
+      release-tag: ${{ steps.version.outputs.release-tag }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: microsoft/setup-msbuild@v3
 
+      # A release comes from a v* tag, which must match AssemblyVersion, or from a version typed in on the Actions tab.
+      # A typed version goes into AssemblyInfo.cs for this build only (it is not committed), so the add-in shows it.
       - name: Read the version
         id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          $info = Get-Content NewAlphabetPlugin/Properties/AssemblyInfo.cs -Raw
+          $infoPath = 'NewAlphabetPlugin/Properties/AssemblyInfo.cs'
+          $info = Get-Content $infoPath -Raw
           if ($info -notmatch '(?m)^\[assembly: AssemblyVersion\("(\d+\.\d+\.\d+)') {
-            throw 'There is no AssemblyVersion in NewAlphabetPlugin/Properties/AssemblyInfo.cs.'
+            throw "There is no AssemblyVersion in $infoPath."
           }
           $version = $Matches[1]
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
-            throw "The tag $env:GITHUB_REF_NAME does not match AssemblyVersion $version. Raise AssemblyVersion in NewAlphabetPlugin/Properties/AssemblyInfo.cs, then tag v$version."
+          $releaseTag = ''
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -ne "v$version") {
+              throw "The tag $env:GITHUB_REF_NAME does not match AssemblyVersion $version in $infoPath. Raise AssemblyVersion to match before tagging, or release from the Actions tab instead."
+            }
+            $releaseTag = $env:GITHUB_REF_NAME
+          } elseif ($env:RELEASE_VERSION) {
+            if ($env:RELEASE_VERSION.Trim() -notmatch '^v?(\d+\.\d+\.\d+)$') {
+              throw "Type the version as three numbers, such as 0.2.0, not '$env:RELEASE_VERSION'."
+            }
+            $version = $Matches[1]
+            if ($env:GITHUB_REF -ne 'refs/heads/main') {
+              throw "Releases are made from main, not $env:GITHUB_REF_NAME. Choose main under 'Use workflow from'."
+            }
+            $releaseTag = "v$version"
+            if (git ls-remote --tags origin "refs/tags/$releaseTag") {
+              throw "$releaseTag already exists. Type a higher version."
+            }
+            $info = $info -replace '(?m)^(\[assembly: Assembly(File)?Version\(")[^"]*', "`${1}$version.0"
+            Set-Content $infoPath $info -NoNewline -Encoding utf8BOM
           }
           # ClickOnce installs a build over an older one only when its version is higher.
           $application = "$version.$env:GITHUB_RUN_NUMBER"
           "application=$application" >> $env:GITHUB_OUTPUT
           "artifact=NewAlphabetPlugin-$application" >> $env:GITHUB_OUTPUT
+          "release-tag=$releaseTag" >> $env:GITHUB_OUTPUT
 
       # The add-in's certificate is not in the repository, so its .pfx comes from the CLICKONCE_PFX_BASE64 secret.
       # Without the secret (pull requests from forks, or before it is set) a throwaway certificate signs the build.
       # That shows it builds, but it is no good for installing: ClickOnce only updates an installed add-in from a
-      # version signed with the same certificate. So tag builds need the secret.
+      # version signed with the same certificate. So releases need the secret.
       - name: Set up the signing certificate
         id: cert
         env:
           PFX_BASE64: ${{ secrets.CLICKONCE_PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.CLICKONCE_PFX_PASSWORD }}
+          RELEASE_TAG: ${{ steps.version.outputs.release-tag }}
         run: |
           if ($env:PFX_BASE64) {
             $pfx = [Convert]::FromBase64String($env:PFX_BASE64)
@@ -90,7 +121,7 @@ jobs:
             $store.Open('ReadWrite')
             $store.Add($cert)
             $store.Close()
-          } elseif ($env:GITHUB_REF_TYPE -eq 'tag') {
+          } elseif ($env:RELEASE_TAG) {
             throw 'Releases must be signed with the add-in''s own certificate. Set the CLICKONCE_PFX_BASE64 secret.'
           } else {
             Write-Output '::warning::CLICKONCE_PFX_BASE64 is not set, so this build is signed with a throwaway certificate.'
@@ -120,7 +151,7 @@ jobs:
 
   release:
     name: Release
-    if: success() && github.ref_type == 'tag'
+    if: success() && needs.build.outputs.release-tag != ''
     needs: [test, build]
     runs-on: ubuntu-latest
     permissions:
@@ -131,11 +162,14 @@ jobs:
           name: ${{ needs.build.outputs.artifact }}
           path: setup
 
+      # After a tag push the tag already exists. For a version typed in on the Actions tab, this creates the tag on the
+      # commit that was built.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.release-tag }}
         run: |
-          zip_name="NewAlphabetPlugin-$GITHUB_REF_NAME.zip"
+          zip_name="NewAlphabetPlugin-$TAG.zip"
           (cd setup && zip -r "../$zip_name" .)
-          gh release create "$GITHUB_REF_NAME" "$zip_name" --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          gh release create "$TAG" "$zip_name" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TAG" --generate-notes

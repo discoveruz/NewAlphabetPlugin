@@ -24,9 +24,10 @@ env:
 jobs:
   test:
     name: Test
-    # windows-2025 has Visual Studio 2022 with the Office/SharePoint workload. The tests need its Office interop
-    # assemblies, and the add-in build needs its VSTO build tools.
-    runs-on: windows-2025
+    # windows-2022 has Visual Studio 2022 with the Office/SharePoint workload. The tests need its Office interop
+    # assemblies, and the add-in build needs its VSTO build tools. Not windows-2025: its MSBuild comes from a newer
+    # Visual Studio whose VSTO tooling can't publish (Microsoft.VisualStudio.Tools.Applications.Hosting is missing).
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
 
@@ -47,7 +48,7 @@ jobs:
 
   build:
     name: Build the add-in
-    runs-on: windows-2025
+    runs-on: windows-2022
     outputs:
       artifact: ${{ steps.version.outputs.artifact }}
     steps:

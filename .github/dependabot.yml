@@ -1,7 +1,9 @@
 version: 2
 updates:
+  # Only the tests have NuGet packages. Dependabot runs on Linux, where the VSTO add-in project can't be
+  # loaded (its Office build targets ship only with Visual Studio), so pointing it at the solution fails.
   - package-ecosystem: nuget
-    directory: "/"
+    directory: "/NewAlphabetPlugin.Tests"
     schedule:
       interval: weekly
 

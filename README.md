@@ -119,7 +119,7 @@ dotnet test NewAlphabetPlugin.Tests
 
 ## Continuous integration
 
-`.github/workflows/build.yml` runs on GitHub's `windows-2025` runner for pushes to `main`, `dev` and `ci/cd`, and
+`.github/workflows/build.yml` runs on GitHub's `windows-2022` runner for pushes to `main`, `dev` and `ci/cd`, and
 for pull requests into `main` and `dev`:
 
 - **Test** runs `dotnet test`. The runner has no Word, so the Word tests are skipped.

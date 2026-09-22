@@ -1,0 +1,140 @@
+# Tests and builds the add-in on every push and pull request. A v* tag also publishes a GitHub release with the
+# ClickOnce setup.
+name: Build
+
+on:
+  push:
+    branches: [main, dev, ci/cd]
+    tags: ['v*']
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Test
+    # windows-2025 has Visual Studio 2022 with the Office/SharePoint workload. The tests need its Office interop
+    # assemblies, and the add-in build needs its VSTO build tools.
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 9.0.x
+
+      # The runner has no Word, so the Word tests are reported as skipped.
+      - name: Run the tests
+        run: dotnet test NewAlphabetPlugin.Tests --configuration Release --logger trx --results-directory TestResults
+
+      - name: Upload the test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/*.trx
+
+  build:
+    name: Build the add-in
+    runs-on: windows-2025
+    outputs:
+      artifact: ${{ steps.version.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: microsoft/setup-msbuild@v3
+
+      - name: Read the version
+        id: version
+        run: |
+          $info = Get-Content NewAlphabetPlugin/Properties/AssemblyInfo.cs -Raw
+          if ($info -notmatch '(?m)^\[assembly: AssemblyVersion\("(\d+\.\d+\.\d+)') {
+            throw 'There is no AssemblyVersion in NewAlphabetPlugin/Properties/AssemblyInfo.cs.'
+          }
+          $version = $Matches[1]
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "The tag $env:GITHUB_REF_NAME does not match AssemblyVersion $version. Raise AssemblyVersion in NewAlphabetPlugin/Properties/AssemblyInfo.cs, then tag v$version."
+          }
+          # ClickOnce installs a build over an older one only when its version is higher.
+          $application = "$version.$env:GITHUB_RUN_NUMBER"
+          "application=$application" >> $env:GITHUB_OUTPUT
+          "artifact=NewAlphabetPlugin-$application" >> $env:GITHUB_OUTPUT
+
+      # The add-in's certificate is not in the repository, so its .pfx comes from the CLICKONCE_PFX_BASE64 secret.
+      # Without the secret (pull requests from forks, or before it is set) a throwaway certificate signs the build.
+      # That shows it builds, but it is no good for installing: ClickOnce only updates an installed add-in from a
+      # version signed with the same certificate. So tag builds need the secret.
+      - name: Set up the signing certificate
+        id: cert
+        env:
+          PFX_BASE64: ${{ secrets.CLICKONCE_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.CLICKONCE_PFX_PASSWORD }}
+        run: |
+          if ($env:PFX_BASE64) {
+            $pfx = [Convert]::FromBase64String($env:PFX_BASE64)
+            $flags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]'UserKeySet, PersistKeySet'
+            $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, [string]$env:PFX_PASSWORD, $flags)
+            $store = [Security.Cryptography.X509Certificates.X509Store]::new('My', 'CurrentUser')
+            $store.Open('ReadWrite')
+            $store.Add($cert)
+            $store.Close()
+          } elseif ($env:GITHUB_REF_TYPE -eq 'tag') {
+            throw 'Releases must be signed with the add-in''s own certificate. Set the CLICKONCE_PFX_BASE64 secret.'
+          } else {
+            Write-Output '::warning::CLICKONCE_PFX_BASE64 is not set, so this build is signed with a throwaway certificate.'
+            # ClickOnce signing needs a CryptoAPI key, not the default CNG one.
+            $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=NewAlphabetPlugin CI' `
+              -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1) `
+              -Provider 'Microsoft Enhanced RSA and AES Cryptographic Provider' -KeySpec Signature
+          }
+          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+
+      - name: Build and publish
+        env:
+          THUMBPRINT: ${{ steps.cert.outputs.thumbprint }}
+          APPLICATION_VERSION: ${{ steps.version.outputs.application }}
+        run: >-
+          msbuild NewAlphabetPlugin/NewAlphabetPlugin.csproj -target:Publish -nologo -verbosity:minimal
+          -property:Configuration=Release
+          "-property:ManifestCertificateThumbprint=$env:THUMBPRINT"
+          "-property:ApplicationVersion=$env:APPLICATION_VERSION"
+
+      - name: Upload the ClickOnce setup
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.artifact }}
+          path: NewAlphabetPlugin/bin/Release/app.publish/
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: success() && github.ref_type == 'tag'
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: setup
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip_name="NewAlphabetPlugin-$GITHUB_REF_NAME.zip"
+          (cd setup && zip -r "../$zip_name" .)
+          gh release create "$GITHUB_REF_NAME" "$zip_name" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

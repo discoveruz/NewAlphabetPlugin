@@ -117,6 +117,35 @@ dotnet test NewAlphabetPlugin.Tests
 - `AlphabetConverterWordTests` runs the add-in's Word code against a hidden copy of Word, each test in a new
   document. On a computer without Word these tests are reported as skipped.
 
+## Continuous integration
+
+`.github/workflows/build.yml` runs on GitHub's `windows-2025` runner for pushes to `main`, `dev` and `ci/cd`, and
+for pull requests into `main` and `dev`:
+
+- **Test** runs `dotnet test`. The runner has no Word, so the Word tests are skipped.
+- **Build the add-in** publishes the ClickOnce setup and uploads it as a build artifact named
+  `NewAlphabetPlugin-<version>`. The version is the `AssemblyVersion` plus the run number, for example `0.1.0.42`.
+- **Release** runs only for a `v*` tag. It attaches the zipped setup to a new GitHub release.
+
+The build signs the ClickOnce manifests with the add-in's certificate, taken from these repository secrets:
+
+| Secret | Value |
+|--------|-------|
+| `CLICKONCE_PFX_BASE64` | The `.pfx` file, Base64-encoded |
+| `CLICKONCE_PFX_PASSWORD` | Its password; leave it unset if the certificate has none |
+
+To set the first one from PowerShell, in the repository folder:
+
+```
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("NewAlphabetPlugin\NewAlphabetPlugin_TemporaryKey.pfx")) | gh secret set CLICKONCE_PFX_BASE64
+```
+
+Without the secret, branch builds are signed with a throwaway certificate and a tag build fails. ClickOnce only updates
+an installed add-in from a version signed with the same certificate, so every release must use the same one.
+
+To release, raise `AssemblyVersion` in `NewAlphabetPlugin/Properties/AssemblyInfo.cs`, commit it, and push a tag
+with the same version, for example `v0.2.0` for `0.2.0.0`. A tag that does not match fails the build.
+
 ## Project layout
 
 | Path | Contents |
@@ -129,6 +158,7 @@ dotnet test NewAlphabetPlugin.Tests
 | `NewAlphabetPlugin/UserSettings.cs` | The remembered ribbon choices |
 | `NewAlphabetPlugin/ThisAddIn.cs` | Add-in startup and Word events |
 | `NewAlphabetPlugin.Tests/` | Tests; `Fixtures/` holds lotin-kirill's sample texts |
+| `.github/workflows/build.yml` | The GitHub Actions build, test and release workflow |
 
 ## Credits
 

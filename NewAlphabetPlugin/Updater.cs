@@ -119,10 +119,13 @@ namespace NewAlphabetPlugin
                 }
                 catch (Exception ex)
                 {
+                    // Besides network trouble: Windows' Smart App Control can block an installer the first time it
+                    // sees it, and let it run a few minutes later, once Microsoft has looked at it.
                     Debug.WriteLine(ex);
                     Exception reason = ex is AggregateException ? ex.GetBaseException() : ex;
                     MessageBox.Show(
-                        "Yangi versiyani örnatib bölmadi: " + reason.Message,
+                        "Yangi versiyani örnatib bölmadi: " + reason.Message + "\n\n" +
+                        "Bir necha daqiqadan keyin «Maʼlumot» tugmasi orqali qayta urinib köring.",
                         AlphabetRibbon.MessageTitle,
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);

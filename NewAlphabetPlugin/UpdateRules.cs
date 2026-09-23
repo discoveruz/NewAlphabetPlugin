@@ -1,5 +1,7 @@
 using System;
+using System.ComponentModel;
 using System.IO;
+using System.Net;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
@@ -9,7 +11,8 @@ namespace NewAlphabetPlugin
 {
     /// <summary>
     /// The parts of looking for a new version that need neither Word nor the network: when to look, how to read
-    /// GitHub's answer and whether that release is newer than the running add-in.
+    /// GitHub's answer, whether that release is newer than the running add-in, and what to tell the user when it
+    /// cannot be installed.
     /// </summary>
     internal static class UpdateRules
     {
@@ -93,6 +96,34 @@ namespace NewAlphabetPlugin
         private static Version ThreeNumbers(Version version)
         {
             return new Version(version.Major, version.Minor, Math.Max(version.Build, 0));
+        }
+
+        // Windows' "An Application Control policy has blocked this file" errors. Smart App Control gives them for a
+        // program it has not seen before, and lets the same program run a few minutes later, once Microsoft has
+        // looked at it. Each release's installer is such a program.
+        private static readonly int[] BlockedByWindows = { 4551, 4556, 4557, 4558, 4559 };
+
+        private const string TryAgainLater = "Bir necha daqiqadan keyin «Maʼlumot» tugmasi orqali qayta urinib köring.";
+
+        /// <summary>
+        /// Says in Uzbek why a new version could not be downloaded or started, and what to do, instead of Windows'
+        /// English error.
+        /// </summary>
+        public static string InstallFailureMessage(Exception error)
+        {
+            var several = error as AggregateException;
+            Exception reason = several != null ? several.Flatten().InnerException : error;
+
+            var windowsError = reason as Win32Exception;
+            if (windowsError != null && Array.IndexOf(BlockedByWindows, windowsError.NativeErrorCode) >= 0)
+            {
+                return "Windows yangi versiyaning örnatuvçisini hozirça töxtatdi, çunki uni hali tanimaydi.\n\n" + TryAgainLater;
+            }
+            if (reason is WebException || reason is IOException)
+            {
+                return "Yangi versiyani yuklab olib bölmadi. Internetga ulanganingizni tekşiring.\n\n" + TryAgainLater;
+            }
+            return "Yangi versiyani örnatib bölmadi.\n\n" + TryAgainLater;
         }
 
         [DataContract]

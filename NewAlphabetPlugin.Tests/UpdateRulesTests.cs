@@ -1,4 +1,7 @@
 using System;
+using System.ComponentModel;
+using System.IO;
+using System.Net;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NewAlphabetPlugin.Tests
@@ -93,6 +96,48 @@ namespace NewAlphabetPlugin.Tests
         public void IsNewer_ComparesTheFirstThreeNumbers(string latest, string current, bool expected)
         {
             Assert.AreEqual(expected, UpdateRules.IsNewer(Version.Parse(latest), Version.Parse(current)));
+        }
+
+        [TestMethod]
+        [DataRow(4551, DisplayName = "4551 An Application Control policy has blocked this file")]
+        [DataRow(4556, DisplayName = "4556 blocked: malicious binary reputation")]
+        [DataRow(4557, DisplayName = "4557 blocked: potentially unwanted application")]
+        [DataRow(4558, DisplayName = "4558 blocked: dangerous file extension from the web")]
+        [DataRow(4559, DisplayName = "4559 blocked: unable to contact reputation service")]
+        public void InstallFailureMessage_WindowsBlockedTheInstaller(int errorCode)
+        {
+            string message = UpdateRules.InstallFailureMessage(new Win32Exception(errorCode));
+
+            StringAssert.StartsWith(message, "Windows yangi versiyaning örnatuvçisini hozirça töxtatdi");
+            StringAssert.Contains(message, "«Maʼlumot» tugmasi orqali qayta urinib köring");
+        }
+
+        [TestMethod]
+        public void InstallFailureMessage_TheDownloadFailed()
+        {
+            // The download runs in a task, so its error arrives wrapped.
+            var error = new AggregateException(new WebException("The remote name could not be resolved: 'github.com'"));
+
+            StringAssert.StartsWith(UpdateRules.InstallFailureMessage(error), "Yangi versiyani yuklab olib bölmadi.");
+        }
+
+        [TestMethod]
+        public void InstallFailureMessage_SavingTheInstallerFailed()
+        {
+            var error = new AggregateException(new IOException("There is not enough space on the disk."));
+
+            StringAssert.StartsWith(UpdateRules.InstallFailureMessage(error), "Yangi versiyani yuklab olib bölmadi.");
+        }
+
+        [TestMethod]
+        [DataRow(2, DisplayName = "2 file not found")]
+        [DataRow(1223, DisplayName = "1223 the user cancelled")]
+        public void InstallFailureMessage_AnythingElse(int errorCode)
+        {
+            string message = UpdateRules.InstallFailureMessage(new Win32Exception(errorCode));
+
+            StringAssert.StartsWith(message, "Yangi versiyani örnatib bölmadi.");
+            Assert.IsFalse(message.Contains(new Win32Exception(errorCode).Message), "Windows' own English text is left out");
         }
 
         [TestMethod]

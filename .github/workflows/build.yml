@@ -1,6 +1,6 @@
-# Tests and builds the add-in on every push and pull request. A v* tag, or a version typed in when the workflow is run
-# from the Actions tab, also publishes a GitHub release with the ClickOnce setup and, through the Publish updates
-# workflow, puts that setup on the GitHub Pages site, where installed add-ins look for a newer version.
+# Tests and builds the add-in on every push and pull request, and packs it into NewAlphabetPlugin-Setup.exe. A v* tag,
+# or a version typed in when the workflow is run from the Actions tab, also publishes a GitHub release with that
+# installer; installed add-ins find it there when they look for a new version.
 name: Build
 
 on:
@@ -55,9 +55,6 @@ jobs:
   build:
     name: Build the add-in
     runs-on: windows-2022
-    permissions:
-      contents: read
-      pages: read  # to look up the address a release is installed from
     outputs:
       artifact: ${{ steps.version.outputs.artifact }}
       release-tag: ${{ steps.version.outputs.release-tag }}
@@ -71,7 +68,6 @@ jobs:
       - name: Read the version
         id: version
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $infoPath = 'NewAlphabetPlugin/Properties/AssemblyInfo.cs'
@@ -101,30 +97,17 @@ jobs:
             $info = $info -replace '(?m)^(\[assembly: Assembly(File)?Version\(")[^"]*', "`${1}$version.0"
             Set-Content $infoPath $info -NoNewline -Encoding utf8BOM
           }
-          # A release is installed from the GitHub Pages site, and that is where Word looks for a newer version.
-          $installUrl = ''
-          if ($releaseTag) {
-            $site = ''
-            # A failed gh writes the error to the output as well, so only its exit code says whether the site is there.
-            try {
-              $site = (gh api "repos/$env:GITHUB_REPOSITORY/pages" --jq 'select(.build_type == "workflow") | .html_url') -join ''
-            } catch {}
-            if ($LASTEXITCODE -ne 0 -or -not $site) {
-              throw 'Turn GitHub Pages on first: Settings, Pages, Source: GitHub Actions. Installed add-ins look there for a newer version.'
-            }
-            $installUrl = $site.TrimEnd('/') + '/'
-          }
-          # ClickOnce installs a build over an older one only when its version is higher.
+          # The run number tells every build apart, for example 0.3.0.57.
           $application = "$version.$env:GITHUB_RUN_NUMBER"
+          "version=$version" >> $env:GITHUB_OUTPUT
           "application=$application" >> $env:GITHUB_OUTPUT
           "artifact=NewAlphabetPlugin-$application" >> $env:GITHUB_OUTPUT
           "release-tag=$releaseTag" >> $env:GITHUB_OUTPUT
-          "install-url=$installUrl" >> $env:GITHUB_OUTPUT
 
-      # The add-in's certificate is not in the repository, so its .pfx comes from the CLICKONCE_PFX_BASE64 secret.
-      # Without the secret (pull requests from forks, or before it is set) a throwaway certificate signs the build.
-      # That shows it builds, but it is no good for installing: ClickOnce only updates an installed add-in from a
-      # version signed with the same certificate. So releases need the secret.
+      # The VSTO runtime only runs an add-in whose manifests are signed. The add-in's certificate is not in the
+      # repository, so its .pfx comes from the CLICKONCE_PFX_BASE64 secret. Without the secret (pull requests from
+      # forks, or before it is set) a throwaway certificate that lasts one day signs the build. That shows it builds,
+      # but a release needs the add-in's own certificate, which lasts ten years.
       - name: Set up the signing certificate
         id: cert
         env:
@@ -144,35 +127,47 @@ jobs:
             throw 'Releases must be signed with the add-in''s own certificate. Set the CLICKONCE_PFX_BASE64 secret.'
           } else {
             Write-Output '::warning::CLICKONCE_PFX_BASE64 is not set, so this build is signed with a throwaway certificate.'
-            # ClickOnce signing needs a CryptoAPI key, not the default CNG one.
+            # The manifests need a CryptoAPI key, not the default CNG one, and a SHA-256 certificate, because Windows
+            # is phasing out SHA-1.
             $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=NewAlphabetPlugin CI' `
-              -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1) `
+              -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1) -HashAlgorithm SHA256 `
               -Provider 'Microsoft Enhanced RSA and AES Cryptographic Provider' -KeySpec Signature
           }
           "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
 
-      - name: Build and publish
+      - name: Build the add-in
         env:
           THUMBPRINT: ${{ steps.cert.outputs.thumbprint }}
           APPLICATION_VERSION: ${{ steps.version.outputs.application }}
-          INSTALL_URL: ${{ steps.version.outputs.install-url }}
-        run: |
-          $properties = @(
-            '-property:Configuration=Release'
-            "-property:ManifestCertificateThumbprint=$env:THUMBPRINT"
-            "-property:ApplicationVersion=$env:APPLICATION_VERSION"
-          )
-          # A release's setup.exe downloads the add-in from the GitHub Pages site instead of from its own folder.
-          if ($env:INSTALL_URL) {
-            $properties += "-property:InstallUrl=$env:INSTALL_URL", '-property:IsWebBootstrapper=true'
-          }
-          msbuild NewAlphabetPlugin/NewAlphabetPlugin.csproj -target:Publish -nologo -verbosity:minimal @properties
+        run: >-
+          msbuild NewAlphabetPlugin/NewAlphabetPlugin.csproj -target:Build -nologo -verbosity:minimal
+          -property:Configuration=Release
+          "-property:ManifestCertificateThumbprint=$env:THUMBPRINT"
+          "-property:ApplicationVersion=$env:APPLICATION_VERSION"
 
-      - name: Upload the ClickOnce setup
+      # Inno Setup packs the built add-in into NewAlphabetPlugin-Setup.exe (installer/NewAlphabetPlugin.iss). The setup
+      # tells the VSTO runtime to trust the key the manifests are signed with, taken here from the built manifest.
+      - name: Make the installer
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          APPLICATION_VERSION: ${{ steps.version.outputs.application }}
+        run: |
+          $manifest = Get-Content NewAlphabetPlugin/bin/Release/NewAlphabetPlugin.vsto -Raw
+          if ($manifest -notmatch '<RSAKeyValue>.*?</RSAKeyValue>') {
+            throw 'The built NewAlphabetPlugin.vsto has no public key.'
+          }
+          $publicKey = $Matches[0]
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --version 6.7.1 --no-progress -y
+          }
+          & $iscc "/DAppVersion=$env:VERSION" "/DFileVersion=$env:APPLICATION_VERSION" "/DPublicKey=$publicKey" installer/NewAlphabetPlugin.iss
+
+      - name: Upload the installer
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.version.outputs.artifact }}
-          path: NewAlphabetPlugin/bin/Release/app.publish/
+          path: installer/Output/NewAlphabetPlugin-Setup.exe
           if-no-files-found: error
 
   release:
@@ -182,27 +177,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write  # to start the Publish updates workflow
     steps:
       - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.artifact }}
-          path: setup
 
       # After a tag push the tag already exists. For a version typed in on the Actions tab, this creates the tag on the
-      # commit that was built.
+      # commit that was built. The installer has the same name in every release, which is what lets
+      # releases/latest/download/NewAlphabetPlugin-Setup.exe always give the newest one.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build.outputs.release-tag }}
-        run: |
-          zip_name="NewAlphabetPlugin-$TAG.zip"
-          (cd setup && zip -r "../$zip_name" .)
-          gh release create "$TAG" "$zip_name" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "$TAG" --generate-notes
-
-      # Word looks for a newer version on the GitHub Pages site, so the new release has to go there too.
-      - name: Publish the update
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: >-
+          gh release create "$TAG" NewAlphabetPlugin-Setup.exe --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+          --title "$TAG" --generate-notes

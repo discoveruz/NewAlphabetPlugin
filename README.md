@@ -47,12 +47,15 @@ Words with letters Uzbek does not use are left alone. This covers the Russian Щ
 
 ## Installing
 
-Download and run [setup.exe](https://discoveruz.github.io/NewAlphabetPlugin/setup.exe). It adds the Visual Studio Tools
-for Office runtime if that is missing, then installs the add-in for your Windows user. Windows asks whether to trust the
-publisher, because the add-in is signed with a certificate made for the project rather than a bought one.
+Download [NewAlphabetPlugin-Setup.exe](https://github.com/discoveruz/NewAlphabetPlugin/releases/latest/download/NewAlphabetPlugin-Setup.exe)
+and run it. It installs the add-in for your Windows user only, so it does not ask for administrator rights. Windows may
+say "Windows protected your PC", because the installer is not signed by a certificate company; choose **More info →
+Run anyway**. The **Yangi alifbo** tab appears the next time Word opens.
 
-Every time Word starts, the add-in looks at the same address for a newer version and installs it by itself. To remove
-it, use Windows Settings → Apps → Installed apps → NewAlphabetPlugin.
+**Updates:** when Word starts, at most once a day, the add-in asks GitHub whether a newer version is out and offers to
+install it. After a no it does not offer that version again by itself, but **Maʼlumot** still shows it and offers it.
+
+To remove the add-in, use Windows Settings → Apps → Installed apps → Yangi alifbo (Word).
 
 ## Using it
 
@@ -65,7 +68,7 @@ Word gets a **Yangi alifbo** tab next to Home:
 |                  | **Bekor qiliş** | Removes the highlights and leaves the text as it was |
 | Qaysi yozuvdan   | **Eski lotin**, **Kirill** | Which scripts Körib çiqiş looks for |
 | Belgilaş rangi   | colour list     | The colour of the highlights (Word's 15 highlight colours; Feruza by default) |
-| Dastur haqida    | **Maʼlumot**    | Shows the version, who made the add-in and how to contact them |
+| Dastur haqida    | **Maʼlumot**    | Shows the version, who made the add-in and how to contact them, and offers a newer version when there is one |
 
 1. Open the document. To convert only part of it, select that part.
 2. Press **Körib çiqiş**. The status bar says how many letters and words were found.
@@ -95,8 +98,8 @@ The ticked scripts and the colour are remembered the next time Word opens.
 ## Requirements
 
 - Windows with Microsoft Word 2013 or later. It is tested with Word 2016 (32-bit).
-- .NET Framework 4.8 and the Visual Studio Tools for Office runtime. The ClickOnce setup installs the runtime if it
-  is missing.
+- .NET Framework 4.8 and the Visual Studio Tools for Office runtime. The setup says so if either is missing and offers
+  Microsoft's download.
 
 To build it you also need Visual Studio 2022 with the **Office/SharePoint development** workload. To run the tests
 from the command line you need the .NET SDK.
@@ -113,9 +116,13 @@ To stop Word loading the development build, use **Build → Clean Solution**.
 The version that **Maʼlumot** shows is the `AssemblyVersion` in `NewAlphabetPlugin/Properties/AssemblyInfo.cs`.
 A release made from the Actions tab uses the version typed in instead; see
 [Continuous integration](#continuous-integration).
-To install the add-in on other computers, use **Build → Publish NewAlphabetPlugin**, which makes a ClickOnce setup.
-With a test certificate, Windows asks the user whether to trust the publisher. A setup made this way is installed from
-the folder it sits in and does not look for newer versions; a released one does.
+A development build never looks for new versions by itself, because its version would always be older than the
+newest release.
+
+To try the installer, take `NewAlphabetPlugin-Setup.exe` from a build's artifacts (see
+[Continuous integration](#continuous-integration)). The installed add-in and the development build use the same
+registration in Word, so installing replaces the development build, and building in Visual Studio replaces the
+installed one again.
 
 ## Tests
 
@@ -127,6 +134,7 @@ dotnet test NewAlphabetPlugin.Tests
   texts: the Cyrillic version, converted, must match the old Latin version, converted.
 - `AlphabetConverterWordTests` runs the add-in's Word code against a hidden copy of Word, each test in a new
   document. On a computer without Word these tests are reported as skipped.
+- `UpdateRulesTests` tests how the add-in reads GitHub's answer about the newest release and compares versions.
 
 ## Continuous integration
 
@@ -134,36 +142,37 @@ dotnet test NewAlphabetPlugin.Tests
 pull requests into `main` and `dev`, and when it is run from the Actions tab:
 
 - **Test** runs `dotnet test`. The runner has no Word, so the Word tests are skipped.
-- **Build the add-in** publishes the ClickOnce setup and uploads it as a build artifact named
+- **Build the add-in** builds it and packs it with [Inno Setup](https://jrsoftware.org/isinfo.php) into
+  `NewAlphabetPlugin-Setup.exe` (`installer/NewAlphabetPlugin.iss`), uploaded as a build artifact named
   `NewAlphabetPlugin-<version>`. The version is the `AssemblyVersion` (or the version typed in for a release) plus
   the run number, for example `0.1.0.42`.
-- **Release** runs only for a release (see below), once Test and Build pass. It attaches the zipped setup to a new
-  GitHub release and then starts Publish updates.
+- **Release** runs only for a release (see below), once Test and Build pass. It attaches the installer to a new
+  GitHub release. The installer has the same name in every release, so
+  `releases/latest/download/NewAlphabetPlugin-Setup.exe` always gives the newest one, and installed add-ins find it
+  when they look for an update.
 
-`.github/workflows/pages.yml` (**Publish updates**) puts the newest release's setup on the GitHub Pages site,
-<https://discoveruz.github.io/NewAlphabetPlugin/>. People install the add-in from there, and every Word start looks
-there for a newer version. Turn the site on once, in **Settings → Pages → Source: GitHub Actions**; it is free for a
-public repository. A release stops early and says so if the site is off. You can also run Publish updates from the
-Actions tab, which puts the newest release on the site again.
-
-The build signs the ClickOnce manifests with the add-in's release certificate, taken from these repository secrets:
+The VSTO runtime only runs an add-in whose manifests are signed. The build signs them with the add-in's release
+certificate, taken from these repository secrets:
 
 | Secret | Value |
 |--------|-------|
 | `CLICKONCE_PFX_BASE64` | The `.pfx` file, Base64-encoded |
 | `CLICKONCE_PFX_PASSWORD` | Its password |
 
-Visual Studio's test certificate is only for your own builds: it is named after your computer and user name, and it
-lasts one year.
-Make the release certificate once, in PowerShell. Replace `Your Name` first, because it can't change later:
+The setup tells the VSTO runtime to trust the key the manifests are signed with, so Word loads the add-in without
+asking. Each setup brings its own key along, so a release signed with a new certificate still installs over an older
+one. Visual Studio's test certificate is only for your own builds: it is named after your computer and user name, and
+it lasts one year.
+Make the release certificate once, in PowerShell, with your name in place of `Your Name`:
 
 ```
 $options = @{
     Subject           = 'CN=Your Name'
     Type              = 'CodeSigningCert'
     NotAfter          = (Get-Date).AddYears(10)
+    HashAlgorithm     = 'SHA256'  # without it the certificate is SHA-1, which Windows is phasing out
     CertStoreLocation = 'Cert:\CurrentUser\My'
-    Provider          = 'Microsoft Enhanced RSA and AES Cryptographic Provider'  # ClickOnce needs a CryptoAPI key
+    Provider          = 'Microsoft Enhanced RSA and AES Cryptographic Provider'  # the manifests need a CryptoAPI key
     KeySpec           = 'Signature'
     KeyExportPolicy   = 'Exportable'
 }
@@ -179,8 +188,7 @@ repository folder; the second command asks for the password:
 gh secret set CLICKONCE_PFX_PASSWORD
 ```
 
-Without the secret, branch builds are signed with a throwaway certificate and a release fails. ClickOnce only updates
-an installed add-in from a version signed with the same certificate, so every release must use the same one.
+Without the secret, branch builds are signed with a throwaway certificate that lasts one day, and a release fails.
 
 There are two ways to release:
 
@@ -191,7 +199,7 @@ There are two ways to release:
   it, and push a tag with the same version, for example `v0.2.0` for `0.2.0.0`. A tag that does not match fails the
   build.
 
-Either way the setup ends up on the Pages site, and installed add-ins take it the next time Word starts.
+Either way, installed add-ins offer the new version within a day, the next time Word starts.
 
 ## Project layout
 
@@ -202,11 +210,13 @@ Either way the setup ends up on the Pages site, and installed add-ins take it th
 | `NewAlphabetPlugin/AlphabetConverter.cs` | Finding, highlighting and replacing in Word documents |
 | `NewAlphabetPlugin/AlphabetRibbon.cs`, `AlphabetRibbon.Designer.cs` | The Yangi alifbo ribbon tab |
 | `NewAlphabetPlugin/HighlightColors.cs` | The highlight colour list |
-| `NewAlphabetPlugin/UserSettings.cs` | The remembered ribbon choices |
+| `NewAlphabetPlugin/UpdateRules.cs` | When to look for a new version and how to read GitHub's answer (no Word code) |
+| `NewAlphabetPlugin/Updater.cs` | Looking for a new version, offering it and starting its installer |
+| `NewAlphabetPlugin/UserSettings.cs` | The remembered ribbon choices and update check |
 | `NewAlphabetPlugin/ThisAddIn.cs` | Add-in startup and Word events |
 | `NewAlphabetPlugin.Tests/` | Tests; `Fixtures/` holds lotin-kirill's sample texts |
+| `installer/NewAlphabetPlugin.iss` | The Inno Setup script that makes `NewAlphabetPlugin-Setup.exe` |
 | `.github/workflows/build.yml` | The GitHub Actions build, test and release workflow |
-| `.github/workflows/pages.yml` | Puts the newest release on the GitHub Pages site, where add-ins look for updates |
 
 ## Credits
 

@@ -11,6 +11,7 @@
     <Compile Include="..\NewAlphabetPlugin\AlphabetRules.cs" Link="Linked\AlphabetRules.cs" />
     <Compile Include="..\NewAlphabetPlugin\AlphabetConverter.cs" Link="Linked\AlphabetConverter.cs" />
     <Compile Include="..\NewAlphabetPlugin\CyrillicRules.cs" Link="Linked\CyrillicRules.cs" />
+    <Compile Include="..\NewAlphabetPlugin\UpdateRules.cs" Link="Linked\UpdateRules.cs" />
   </ItemGroup>
 
   <!-- Matching Cyrillic and old Latin texts from the lotin-kirill transliterator's tests. -->

@@ -70,5 +70,29 @@ namespace NewAlphabetPlugin.Properties {
                 this["ConvertCyrillic"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LastUpdateCheck {
+            get {
+                return ((string)(this["LastUpdateCheck"]));
+            }
+            set {
+                this["LastUpdateCheck"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string SkippedUpdate {
+            get {
+                return ((string)(this["SkippedUpdate"]));
+            }
+            set {
+                this["SkippedUpdate"] = value;
+            }
+        }
     }
 }

@@ -34,11 +34,9 @@
     <!-- msbuild -t:Publish needs these two; without IsWebBootstrapper no setup.exe is generated. -->
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <PublishUrl>publish\</PublishUrl>
-    <!-- Every time Word starts, the add-in looks for a newer version where it was installed from. A number of days
-         here instead of 0 makes it look that often at most. -->
-    <UpdateEnabled>true</UpdateEnabled>
-    <UpdateInterval>0</UpdateInterval>
-    <UpdateIntervalUnits>days</UpdateIntervalUnits>
+    <!-- The add-in looks for new versions itself (Updater.cs) and NewAlphabetPlugin-Setup.exe installs them, so
+         ClickOnce's own update check is off. -->
+    <UpdateEnabled>false</UpdateEnabled>
     <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
     <ApplicationVersion>0.1.0.0</ApplicationVersion>
   </PropertyGroup>
@@ -114,6 +112,7 @@
     <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
@@ -235,6 +234,8 @@
     <Compile Include="ThisAddIn.Designer.cs">
       <DependentUpon>ThisAddIn.Designer.xml</DependentUpon>
     </Compile>
+    <Compile Include="UpdateRules.cs" />
+    <Compile Include="Updater.cs" />
     <Compile Include="UserSettings.cs" />
     <AppDesigner Include="Properties\" />
   </ItemGroup>

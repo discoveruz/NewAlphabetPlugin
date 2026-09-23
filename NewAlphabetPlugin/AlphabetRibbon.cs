@@ -9,7 +9,7 @@ namespace NewAlphabetPlugin
 {
     public partial class AlphabetRibbon
     {
-        private const string MessageTitle = "Yangi alifbo";
+        internal const string MessageTitle = "Yangi alifbo";
 
         // {0} is the version.
         private const string AboutText =
@@ -132,11 +132,22 @@ namespace NewAlphabetPlugin
             });
         }
 
-        // The version is the AssemblyVersion in Properties\AssemblyInfo.cs.
+        // The version is the AssemblyVersion in Properties\AssemblyInfo.cs. When a newer release is out, the message
+        // also offers to install it, even one the user said no to when Word offered it.
         private void btnAbout_Click(object sender, RibbonControlEventArgs e)
         {
             Version version = typeof(AlphabetRibbon).Assembly.GetName().Version;
-            ShowMessage(string.Format(AboutText, version.ToString(3)), MessageBoxIcon.Information);
+            string about = string.Format(AboutText, version.ToString(3));
+            ReleaseInfo newer = Updater.FindNewerRelease();
+            if (newer == null)
+            {
+                ShowMessage(about, MessageBoxIcon.Information);
+            }
+            else if (MessageBox.Show(about + "\n\n" + Updater.OfferText(newer), MessageTitle, MessageBoxButtons.YesNo,
+                         MessageBoxIcon.Information) == DialogResult.Yes)
+            {
+                Updater.Install(newer);
+            }
         }
 
         /// <summary>

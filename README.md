@@ -45,6 +45,15 @@ They also match longer forms such as бюджетга and октябрда.
 
 Words with letters Uzbek does not use are left alone. This covers the Russian Щ and Ы and Ukrainian or Kyrgyz letters.
 
+## Installing
+
+Download and run [setup.exe](https://discoveruz.github.io/NewAlphabetPlugin/setup.exe). It adds the Visual Studio Tools
+for Office runtime if that is missing, then installs the add-in for your Windows user. Windows asks whether to trust the
+publisher, because the add-in is signed with a certificate made for the project rather than a bought one.
+
+Every time Word starts, the add-in looks at the same address for a newer version and installs it by itself. To remove
+it, use Windows Settings → Apps → Installed apps → NewAlphabetPlugin.
+
 ## Using it
 
 Word gets a **Yangi alifbo** tab next to Home:
@@ -105,7 +114,8 @@ The version that **Maʼlumot** shows is the `AssemblyVersion` in `NewAlphabetPlu
 A release made from the Actions tab uses the version typed in instead; see
 [Continuous integration](#continuous-integration).
 To install the add-in on other computers, use **Build → Publish NewAlphabetPlugin**, which makes a ClickOnce setup.
-With a test certificate, Windows asks the user whether to trust the publisher.
+With a test certificate, Windows asks the user whether to trust the publisher. A setup made this way is installed from
+the folder it sits in and does not look for newer versions; a released one does.
 
 ## Tests
 
@@ -128,7 +138,13 @@ pull requests into `main` and `dev`, and when it is run from the Actions tab:
   `NewAlphabetPlugin-<version>`. The version is the `AssemblyVersion` (or the version typed in for a release) plus
   the run number, for example `0.1.0.42`.
 - **Release** runs only for a release (see below), once Test and Build pass. It attaches the zipped setup to a new
-  GitHub release.
+  GitHub release and then starts Publish updates.
+
+`.github/workflows/pages.yml` (**Publish updates**) puts the newest release's setup on the GitHub Pages site,
+<https://discoveruz.github.io/NewAlphabetPlugin/>. People install the add-in from there, and every Word start looks
+there for a newer version. Turn the site on once, in **Settings → Pages → Source: GitHub Actions**; it is free for a
+public repository. A release stops early and says so if the site is off. You can also run Publish updates from the
+Actions tab, which puts the newest release on the site again.
 
 The build signs the ClickOnce manifests with the add-in's release certificate, taken from these repository secrets:
 
@@ -175,6 +191,8 @@ There are two ways to release:
   it, and push a tag with the same version, for example `v0.2.0` for `0.2.0.0`. A tag that does not match fails the
   build.
 
+Either way the setup ends up on the Pages site, and installed add-ins take it the next time Word starts.
+
 ## Project layout
 
 | Path | Contents |
@@ -188,6 +206,7 @@ There are two ways to release:
 | `NewAlphabetPlugin/ThisAddIn.cs` | Add-in startup and Word events |
 | `NewAlphabetPlugin.Tests/` | Tests; `Fixtures/` holds lotin-kirill's sample texts |
 | `.github/workflows/build.yml` | The GitHub Actions build, test and release workflow |
+| `.github/workflows/pages.yml` | Puts the newest release on the GitHub Pages site, where add-ins look for updates |
 
 ## Credits
 

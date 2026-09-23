@@ -34,6 +34,11 @@
     <!-- msbuild -t:Publish needs these two; without IsWebBootstrapper no setup.exe is generated. -->
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <PublishUrl>publish\</PublishUrl>
+    <!-- Every time Word starts, the add-in looks for a newer version where it was installed from. A number of days
+         here instead of 0 makes it look that often at most. -->
+    <UpdateEnabled>true</UpdateEnabled>
+    <UpdateInterval>0</UpdateInterval>
+    <UpdateIntervalUnits>days</UpdateIntervalUnits>
     <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
     <ApplicationVersion>0.1.0.0</ApplicationVersion>
   </PropertyGroup>

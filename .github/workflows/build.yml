@@ -1,5 +1,6 @@
 # Tests and builds the add-in on every push and pull request. A v* tag, or a version typed in when the workflow is run
-# from the Actions tab, also publishes a GitHub release with the ClickOnce setup.
+# from the Actions tab, also publishes a GitHub release with the ClickOnce setup and, through the Publish updates
+# workflow, puts that setup on the GitHub Pages site, where installed add-ins look for a newer version.
 name: Build
 
 on:
@@ -54,6 +55,9 @@ jobs:
   build:
     name: Build the add-in
     runs-on: windows-2022
+    permissions:
+      contents: read
+      pages: read  # to look up the address a release is installed from
     outputs:
       artifact: ${{ steps.version.outputs.artifact }}
       release-tag: ${{ steps.version.outputs.release-tag }}
@@ -67,6 +71,7 @@ jobs:
       - name: Read the version
         id: version
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $infoPath = 'NewAlphabetPlugin/Properties/AssemblyInfo.cs'
@@ -96,11 +101,25 @@ jobs:
             $info = $info -replace '(?m)^(\[assembly: Assembly(File)?Version\(")[^"]*', "`${1}$version.0"
             Set-Content $infoPath $info -NoNewline -Encoding utf8BOM
           }
+          # A release is installed from the GitHub Pages site, and that is where Word looks for a newer version.
+          $installUrl = ''
+          if ($releaseTag) {
+            $site = ''
+            # A failed gh writes the error to the output as well, so only its exit code says whether the site is there.
+            try {
+              $site = (gh api "repos/$env:GITHUB_REPOSITORY/pages" --jq 'select(.build_type == "workflow") | .html_url') -join ''
+            } catch {}
+            if ($LASTEXITCODE -ne 0 -or -not $site) {
+              throw 'Turn GitHub Pages on first: Settings, Pages, Source: GitHub Actions. Installed add-ins look there for a newer version.'
+            }
+            $installUrl = $site.TrimEnd('/') + '/'
+          }
           # ClickOnce installs a build over an older one only when its version is higher.
           $application = "$version.$env:GITHUB_RUN_NUMBER"
           "application=$application" >> $env:GITHUB_OUTPUT
           "artifact=NewAlphabetPlugin-$application" >> $env:GITHUB_OUTPUT
           "release-tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "install-url=$installUrl" >> $env:GITHUB_OUTPUT
 
       # The add-in's certificate is not in the repository, so its .pfx comes from the CLICKONCE_PFX_BASE64 secret.
       # Without the secret (pull requests from forks, or before it is set) a throwaway certificate signs the build.
@@ -136,11 +155,18 @@ jobs:
         env:
           THUMBPRINT: ${{ steps.cert.outputs.thumbprint }}
           APPLICATION_VERSION: ${{ steps.version.outputs.application }}
-        run: >-
-          msbuild NewAlphabetPlugin/NewAlphabetPlugin.csproj -target:Publish -nologo -verbosity:minimal
-          -property:Configuration=Release
-          "-property:ManifestCertificateThumbprint=$env:THUMBPRINT"
-          "-property:ApplicationVersion=$env:APPLICATION_VERSION"
+          INSTALL_URL: ${{ steps.version.outputs.install-url }}
+        run: |
+          $properties = @(
+            '-property:Configuration=Release'
+            "-property:ManifestCertificateThumbprint=$env:THUMBPRINT"
+            "-property:ApplicationVersion=$env:APPLICATION_VERSION"
+          )
+          # A release's setup.exe downloads the add-in from the GitHub Pages site instead of from its own folder.
+          if ($env:INSTALL_URL) {
+            $properties += "-property:InstallUrl=$env:INSTALL_URL", '-property:IsWebBootstrapper=true'
+          }
+          msbuild NewAlphabetPlugin/NewAlphabetPlugin.csproj -target:Publish -nologo -verbosity:minimal @properties
 
       - name: Upload the ClickOnce setup
         uses: actions/upload-artifact@v7
@@ -156,6 +182,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write  # to start the Publish updates workflow
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -173,3 +200,9 @@ jobs:
           (cd setup && zip -r "../$zip_name" .)
           gh release create "$TAG" "$zip_name" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "$TAG" --generate-notes
+
+      # Word looks for a newer version on the GitHub Pages site, so the new release has to go there too.
+      - name: Publish the update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

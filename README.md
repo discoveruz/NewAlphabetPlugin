@@ -50,7 +50,8 @@ Words with letters Uzbek does not use are left alone. This covers the Russian Щ
 Download [NewAlphabetPlugin-Setup.exe](https://github.com/discoveruz/NewAlphabetPlugin/releases/latest/download/NewAlphabetPlugin-Setup.exe)
 and run it. It installs the add-in for your Windows user only, so it does not ask for administrator rights. Windows may
 say "Windows protected your PC", because the installer is not signed by a certificate company; choose **More info →
-Run anyway**. The **Yangi alifbo** tab appears the next time Word opens.
+Run anyway**. Where Smart App Control is on, it can block a new installer the first time it sees it; running it again
+a few minutes later usually lets it through. The **Yangi alifbo** tab appears the next time Word opens.
 
 **Updates:** when Word starts, at most once a day, the add-in asks GitHub whether a newer version is out and offers to
 install it. After a no it does not offer that version again by itself, but **Maʼlumot** still shows it and offers it.

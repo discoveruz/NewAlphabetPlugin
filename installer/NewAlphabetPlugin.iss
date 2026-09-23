@@ -52,6 +52,11 @@ SetupLogging=yes
 [Messages]
 FinishedLabelNoIcons=Setup has finished installing [name]. The Yangi alifbo tab appears next to Home the next time Word opens.
 
+; The add-in's only network use that the user has not just asked for, so it is shown here and can be turned off.
+; See "Privacy" in README.md. An update keeps the earlier choice.
+[Tasks]
+Name: "updatecheck"; GroupDescription: "Updates:"; Description: "Look for new versions once a day when Word starts. This asks GitHub for the newest release; no documents or personal data are sent. Without it, the Ma'lumot button still looks when you press it."
+
 [Files]
 ; The manifests are signed over the exact files, so they are installed exactly as built.
 Source: "{#SourceDir}\NewAlphabetPlugin.vsto"; DestDir: "{app}"; Flags: ignoreversion
@@ -67,6 +72,9 @@ Root: HKCU; Subkey: "{#AddinKey}"; ValueType: string; ValueName: "FriendlyName";
 Root: HKCU; Subkey: "{#AddinKey}"; ValueType: string; ValueName: "Description"; ValueData: "Writes Uzbek text in the new Latin alphabet"
 Root: HKCU; Subkey: "{#InclusionKey}"; ValueType: string; ValueName: "Url"; ValueData: "{code:ManifestUrl}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "{#InclusionKey}"; ValueType: string; ValueName: "PublicKey"; ValueData: "{#PublicKey}"
+; Read by Updater.cs.
+Root: HKCU; Subkey: "Software\NewAlphabetPlugin"; ValueType: dword; ValueName: "CheckForUpdates"; ValueData: 1; Tasks: updatecheck; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\NewAlphabetPlugin"; ValueType: dword; ValueName: "CheckForUpdates"; ValueData: 0; Tasks: not updatecheck; Flags: uninsdeletekey
 
 [Code]
 const

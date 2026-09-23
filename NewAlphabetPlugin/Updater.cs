@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace NewAlphabetPlugin
 {
@@ -30,9 +31,31 @@ namespace NewAlphabetPlugin
             get { return "NewAlphabetPlugin/" + CurrentVersion.ToString(3); }
         }
 
+        // The installer's "Look for new versions" choice. A copy installed before the choice existed has no value and
+        // looks, as it did then; when the choice cannot be read, it does not look.
+        private static bool AutomaticCheckChosen
+        {
+            get
+            {
+                try
+                {
+                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\NewAlphabetPlugin"))
+                    {
+                        object value = key == null ? null : key.GetValue("CheckForUpdates");
+                        return value == null || (value is int && (int)value != 0);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                    return false;
+                }
+            }
+        }
+
         /// <summary>
-        /// Looks for a new version in the background when a day has passed since the last look. Call it on Word's
-        /// thread, where the offer is then shown.
+        /// Looks for a new version in the background when a day has passed since the last look, unless it was turned
+        /// off during installation. Call it on Word's thread, where the offer is then shown.
         /// </summary>
         public static void CheckInBackground()
         {
@@ -42,7 +65,7 @@ namespace NewAlphabetPlugin
 #else
             try
             {
-                if (!UpdateRules.IsCheckDue(UserSettings.LastUpdateCheck, DateTime.UtcNow))
+                if (!AutomaticCheckChosen || !UpdateRules.IsCheckDue(UserSettings.LastUpdateCheck, DateTime.UtcNow))
                 {
                     return;
                 }

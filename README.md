@@ -55,6 +55,8 @@ a few minutes later usually lets it through. The **Yangi alifbo** tab appears th
 
 **Updates:** when Word starts, at most once a day, the add-in asks GitHub whether a newer version is out and offers to
 install it. After a no it does not offer that version again by itself, but **Maʼlumot** still shows it and offers it.
+The setup has a box for this daily look, ticked unless you untick it; to change your choice, run the setup again. See
+[Privacy](#privacy).
 
 To remove the add-in, use Windows Settings → Apps → Installed apps → Yangi alifbo (Word).
 
@@ -219,7 +221,41 @@ Either way, installed add-ins offer the new version within a day, the next time 
 | `installer/NewAlphabetPlugin.iss` | The Inno Setup script that makes `NewAlphabetPlugin-Setup.exe` |
 | `.github/workflows/build.yml` | The GitHub Actions build, test and release workflow |
 
+## Privacy
+
+The add-in changes your documents only inside Word and never sends them anywhere. It uses the network only to look
+for new versions:
+
+- **Once a day, when Word starts**, if the setup's box for it was left ticked, it asks GitHub (`api.github.com`) for
+  the newest release. The request carries the add-in's version and, like any web request, your IP address.
+- **When you press Maʼlumot**, it asks GitHub the same.
+- **When you agree to install a new version**, it downloads the installer from this repository's GitHub releases.
+
+It collects nothing else: no statistics, no documents and no personal data. GitHub's
+[privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) covers those
+requests.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org). The project has applied; until SignPath Foundation approves it,
+`NewAlphabetPlugin-Setup.exe` is not signed.
+
+- **Committers and reviewers:** [@discoveruz](https://github.com/discoveruz). Every change reaches `main` through a
+  pull request that the maintainer reviews before merging.
+- **Approvers:** [@discoveruz](https://github.com/discoveruz) approves each signing request.
+- **What is signed:** `NewAlphabetPlugin-Setup.exe`, built only by GitHub Actions (`.github/workflows/build.yml`) from
+  `main` for a release. It contains the add-in built from this repository and
+  `Microsoft.Office.Tools.Common.v4.0.Utilities.dll`, which the Visual Studio Tools for Office runtime needs and which
+  Microsoft has signed.
+- **Privacy:** see [Privacy](#privacy).
+
+## Licence
+
+[MIT](LICENSE).
+
 ## Credits
 
 The Cyrillic rules follow [lotin-kirill](https://github.com/diyorbek/lotin-kirill), and the sample texts in
 `NewAlphabetPlugin.Tests/Fixtures` come from it. lotin-kirill is © 2024 Diyorbek Sadullaev, MIT licence.
+The installer is made with [Inno Setup](https://jrsoftware.org/isinfo.php).

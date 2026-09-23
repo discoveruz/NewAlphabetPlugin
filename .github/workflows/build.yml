@@ -184,7 +184,8 @@ jobs:
 
       # After a tag push the tag already exists. For a version typed in on the Actions tab, this creates the tag on the
       # commit that was built. The installer has the same name in every release, which is what lets
-      # releases/latest/download/NewAlphabetPlugin-Setup.exe always give the newest one.
+      # releases/latest/download/NewAlphabetPlugin-Setup.exe always give the newest one. SignPath Foundation asks for
+      # the code signing policy to be linked from every release page.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -192,3 +193,4 @@ jobs:
         run: >-
           gh release create "$TAG" NewAlphabetPlugin-Setup.exe --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
           --title "$TAG" --generate-notes
+          --notes "Install or update with **NewAlphabetPlugin-Setup.exe** below. [Code signing policy](https://github.com/$GITHUB_REPOSITORY#code-signing-policy) · [Privacy](https://github.com/$GITHUB_REPOSITORY#privacy)"

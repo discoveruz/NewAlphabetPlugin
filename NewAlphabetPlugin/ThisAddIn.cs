@@ -22,6 +22,7 @@ namespace NewAlphabetPlugin
             Converter.ConvertCyrillic = UserSettings.ConvertCyrillic;
             this.Application.WindowActivate += Application_WindowActivate;
             this.Application.DocumentBeforeClose += Application_DocumentBeforeClose;
+            Updater.CheckInBackground();
         }
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)

@@ -428,3 +428,5 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
+# Inno Setup output (installer/NewAlphabetPlugin.iss)
+installer/Output/
